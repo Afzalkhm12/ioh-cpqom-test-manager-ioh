@@ -39,5 +39,8 @@ class DatabaseSeeder extends Seeder
         foreach ($modules as $mod) {
             \App\Models\Module::firstOrCreate(['name' => $mod['name']], $mod);
         }
+
+        // Test Suite (modules, parameters, runtime state)
+        $this->call(TestSuiteSeeder::class);
     }
 }

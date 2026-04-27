@@ -21,6 +21,12 @@
                     <x-nav-link :href="route('cpq-simulator.index')" :active="request()->routeIs('cpq-simulator.*')">
                         {{ __('CPQ Simulator') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('test-suite.index')" :active="request()->routeIs('test-suite.*')">
+                        {{ __('Test Suite') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('test-specs.index')" :active="request()->routeIs('test-specs.*')">
+                        {{ __('Spec Files') }}
+                    </x-nav-link>
                 </div>
             </div>
 
