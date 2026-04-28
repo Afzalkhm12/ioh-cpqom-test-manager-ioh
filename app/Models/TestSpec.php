@@ -12,6 +12,7 @@ class TestSpec extends Model
         'runner_key',
         'file_path',
         'description',
+        'test_type',
     ];
 
     public function testModules(): HasMany

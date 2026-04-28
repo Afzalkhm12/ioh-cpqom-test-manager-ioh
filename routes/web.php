@@ -33,6 +33,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/test-suite/{testModule}/counter/reset', [App\Http\Controllers\TestSuiteController::class, 'resetCounter'])->name('test-suite.counter.reset');
     Route::put('/test-suite/{testModule}/spec', [App\Http\Controllers\TestSuiteController::class, 'updateSpec'])->name('test-suite.spec.update');
     Route::post('/test-suite/{testModule}/run', [App\Http\Controllers\TestSuiteController::class, 'runSpec'])->name('test-suite.run');
+    Route::get('/test-suite/{testModule}/api-test', [App\Http\Controllers\QuoteApiTestController::class, 'show'])->name('test-suite.api-test.show');
+    Route::post('/test-suite/{testModule}/api-test/run', [App\Http\Controllers\QuoteApiTestController::class, 'run'])->name('test-suite.api-test.run');
 
     // Spec Files management
     Route::get('/test-specs', [App\Http\Controllers\TestSpecController::class, 'index'])->name('test-specs.index');

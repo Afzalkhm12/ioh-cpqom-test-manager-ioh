@@ -1,0 +1,457 @@
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-brand-dark leading-tight flex items-center gap-2">
+            <a href="{{ route('test-suite.index') }}" class="text-gray-400 hover:text-brand-dark transition-colors">Test Suite</a>
+            <span class="text-gray-300">/</span>
+            <a href="{{ route('test-suite.show', $testModule) }}" class="text-gray-400 hover:text-brand-dark transition-colors">{{ $testModule->display_name }}</a>
+            <span class="text-gray-300">/</span>
+            API Test
+        </h2>
+    </x-slot>
+
+    <div class="py-8 bg-gray-50 min-h-screen" x-data="apiTest()" x-cloak>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+
+            <!-- Page title -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <span class="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{{ $testModule->module_key }}</span>
+                        <h3 class="text-xl font-bold text-brand-dark mt-1">{{ $testModule->display_name }} — Quote API Test</h3>
+                        <p class="text-sm text-gray-500 mt-1">Creates a real quote in Salesforce, randomly adds products, optionally randomises attributes and overrides pricing, then asserts on the results.</p>
+                    </div>
+                    <a href="{{ route('test-suite.show', $testModule) }}"
+                       class="text-xs text-gray-400 hover:text-brand-teal transition-colors whitespace-nowrap">← Back to suite</a>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+
+                <!-- ── Left: Configuration ────────────────────────────── -->
+                <div class="space-y-4">
+
+                    <!-- Persona -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                        <h4 class="text-sm font-bold text-brand-dark mb-3">Salesforce Persona</h4>
+                        <select x-model="selectedPersonaId"
+                                class="block w-full border-gray-300 focus:border-brand-teal focus:ring-brand-teal rounded-md shadow-sm text-sm">
+                            <option value="">System Default</option>
+                            @foreach($sfUsers as $sfu)
+                                <option value="{{ $sfu->id }}" data-username="{{ $sfu->username }}">
+                                    {{ $sfu->label }} ({{ $sfu->username }})
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <!-- Opportunity -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-bold text-brand-dark">Opportunity</h4>
+                            <button @click="fetchOpportunities()" :disabled="isLoading"
+                                    class="text-xs px-3 py-1.5 bg-brand-teal text-white rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-50">
+                                Load Opportunities
+                            </button>
+                        </div>
+
+                        <template x-if="selectedOpportunityId">
+                            <div class="mb-3 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                ✓ Selected: <span class="font-mono font-bold" x-text="selectedOpportunityId"></span>
+                            </div>
+                        </template>
+
+                        <template x-if="opportunities.length > 0">
+                            <div>
+                                <div class="overflow-x-auto border border-gray-100 rounded-lg">
+                                    <table class="min-w-full divide-y divide-gray-100 text-xs">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left font-medium text-gray-600">Name</th>
+                                                <th class="px-3 py-2 text-left font-medium text-gray-600">Stage</th>
+                                                <th class="px-3 py-2 text-right font-medium text-gray-600">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <template x-for="opp in paginatedOpportunities()" :key="opp.Id">
+                                                <tr :class="selectedOpportunityId === opp.Id ? 'bg-brand-teal bg-opacity-10' : 'hover:bg-gray-50'">
+                                                    <td class="px-3 py-2 font-medium text-gray-900" x-text="opp.Name"></td>
+                                                    <td class="px-3 py-2 text-gray-500" x-text="opp.StageName"></td>
+                                                    <td class="px-3 py-2 text-right">
+                                                        <button @click="selectedOpportunityId = opp.Id"
+                                                                class="px-2 py-0.5 bg-brand-teal text-white rounded text-xs">
+                                                            <span x-text="selectedOpportunityId === opp.Id ? '✓' : 'Select'"></span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <!-- Pagination -->
+                                <div class="flex items-center justify-between mt-2 px-1">
+                                    <span class="text-xs text-gray-400"
+                                        x-text="`${Math.min((oppPage-1)*oppPageSize+1, opportunities.length)}–${Math.min(oppPage*oppPageSize, opportunities.length)} of ${opportunities.length}`">
+                                    </span>
+                                    <div class="flex gap-1.5">
+                                        <button @click="oppPage--" :disabled="oppPage <= 1"
+                                                class="px-2 py-0.5 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-100">← Prev</button>
+                                        <button @click="oppPage++" :disabled="oppPage >= Math.ceil(opportunities.length / oppPageSize)"
+                                                class="px-2 py-0.5 text-xs rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-100">Next →</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Quote Config -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+                        <h4 class="text-sm font-bold text-brand-dark">Quote Configuration</h4>
+
+                        <div>
+                            <x-input-label value="Quote Name" />
+                            <x-text-input type="text" x-model="quoteName" class="mt-1 block w-full text-sm" />
+                        </div>
+
+                        <div>
+                            <x-input-label value="Price List" />
+                            <div class="flex gap-2 mt-1">
+                                <select x-model="priceListId"
+                                        class="flex-1 border-gray-300 focus:border-brand-teal focus:ring-brand-teal rounded-md shadow-sm text-sm">
+                                    <option value="">— Select Price List —</option>
+                                    <template x-for="pl in priceLists" :key="pl.Id">
+                                        <option :value="pl.Id" x-text="pl.Name"></option>
+                                    </template>
+                                </select>
+                                <button @click="fetchPriceLists()" :disabled="isLoading || priceLists.length > 0"
+                                        class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-300 disabled:opacity-50 whitespace-nowrap">
+                                    Load
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div>
+                                <x-input-label value="Currency" />
+                                <x-text-input type="text" x-model="currency" class="mt-1 block w-full text-sm" />
+                            </div>
+                            <div>
+                                <x-input-label value="Record Type ID" />
+                                <x-text-input type="text" x-model="recordTypeId" class="mt-1 block w-full text-sm font-mono text-xs" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Test Options -->
+                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+                        <h4 class="text-sm font-bold text-brand-dark">Test Options</h4>
+
+                        <div>
+                            <x-input-label value="Number of Random Products (1–20)" />
+                            <x-text-input type="number" x-model.number="productCount" min="1" max="20" class="mt-1 block w-32 text-sm" />
+                        </div>
+
+                        <!-- Randomize Attributes -->
+                        <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                            <input type="checkbox" x-model="randomizeAttributes"
+                                   class="rounded border-gray-300 text-brand-teal focus:ring-brand-teal" />
+                            Randomize attributes on bundle child items
+                        </label>
+
+                        <!-- Override Pricing -->
+                        <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                            <input type="checkbox" x-model="overridePricing"
+                                   class="rounded border-gray-300 text-brand-teal focus:ring-brand-teal" />
+                            Override OTC / RC pricing
+                        </label>
+
+                        <template x-if="overridePricing">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;" class="pt-1">
+                                <div>
+                                    <x-input-label value="OTC Override (leave blank to skip)" />
+                                    <x-text-input type="number" x-model.number="otcOverride" min="0" step="0.01" class="mt-1 block w-full text-sm" placeholder="e.g. 150000" />
+                                </div>
+                                <div>
+                                    <x-input-label value="RC Override (leave blank to skip)" />
+                                    <x-text-input type="number" x-model.number="rcOverride" min="0" step="0.01" class="mt-1 block w-full text-sm" placeholder="e.g. 50000" />
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Run Button -->
+                    <button @click="runTest()"
+                            :disabled="running || !selectedOpportunityId || !priceListId"
+                            class="w-full py-3 bg-brand-teal text-white font-bold rounded-xl shadow hover:opacity-90 transition disabled:opacity-40 flex items-center justify-center gap-2">
+                        <svg x-show="!running" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M6.3 2.84A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.27l9.34-5.89a1.5 1.5 0 000-2.54L6.3 2.84z"/>
+                        </svg>
+                        <svg x-show="running" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                        </svg>
+                        <span x-text="running ? 'Running test…' : 'Run API Test'"></span>
+                    </button>
+
+                </div>
+
+                <!-- ── Right: Results ──────────────────────────────────── -->
+                <div class="space-y-4">
+
+                    <!-- Placeholder when no result yet -->
+                    <template x-if="!result && !running">
+                        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 flex flex-col items-center justify-center text-center text-gray-400">
+                            <svg class="w-12 h-12 mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                            </svg>
+                            <p class="text-sm">Configure and run the test to see results here.</p>
+                        </div>
+                    </template>
+
+                    <template x-if="running && !result">
+                        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 flex flex-col items-center justify-center text-center text-gray-400">
+                            <svg class="w-10 h-10 mb-3 animate-spin text-brand-teal" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            <p class="text-sm">Executing CPQ API flow…</p>
+                        </div>
+                    </template>
+
+                    <template x-if="result">
+                        <!-- Overall status banner -->
+                        <div :class="result.error ? 'bg-red-50 border-red-300 text-red-800' : (result.success ? 'bg-green-50 border-green-300 text-green-800' : 'bg-yellow-50 border-yellow-300 text-yellow-800')"
+                             class="rounded-2xl border p-4 flex items-center gap-3">
+                            <span class="text-2xl" x-text="result.error ? '✗' : (result.success ? '✓' : '⚠')"></span>
+                            <div>
+                                <div class="font-bold text-sm" x-text="result.error ? 'Test Failed — Error' : (result.success ? 'All Assertions Passed' : 'Some Assertions Failed')"></div>
+                                <template x-if="result.cartId">
+                                    <div class="text-xs mt-0.5">
+                                        Cart ID: <span class="font-mono" x-text="result.cartId"></span>
+                                        <span x-show="result.quoteTotal" class="ml-3">
+                                            Quote Total: <strong x-text="result.quoteTotal?.toLocaleString()"></strong>
+                                        </span>
+                                    </div>
+                                </template>
+                                <template x-if="result.error">
+                                    <div class="text-xs mt-0.5 font-mono" x-text="result.error"></div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Assertions -->
+                        <template x-if="result.assertions && result.assertions.length > 0">
+                            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div class="px-5 py-3 border-b border-gray-100 font-bold text-sm text-brand-dark">Assertions</div>
+                                <table class="min-w-full text-sm">
+                                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
+                                        <tr>
+                                            <th class="px-5 py-2 text-left">Check</th>
+                                            <th class="px-5 py-2 text-center">Expected</th>
+                                            <th class="px-5 py-2 text-center">Actual</th>
+                                            <th class="px-5 py-2 text-center">Result</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <template x-for="a in result.assertions" :key="a.label">
+                                            <tr>
+                                                <td class="px-5 py-3 font-medium text-gray-800" x-text="a.label"></td>
+                                                <td class="px-5 py-3 text-center font-mono text-xs text-gray-600" x-text="a.expected"></td>
+                                                <td class="px-5 py-3 text-center font-mono text-xs text-gray-600" x-text="a.actual"></td>
+                                                <td class="px-5 py-3 text-center">
+                                                    <span :class="a.pass ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                                                          class="inline-block px-2 py-0.5 rounded text-xs font-bold"
+                                                          x-text="a.pass ? 'PASS' : 'FAIL'">
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <!-- Products in cart -->
+                        <template x-if="result.products && result.products.length > 0">
+                            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div class="px-5 py-3 border-b border-gray-100 font-bold text-sm text-brand-dark">
+                                    Products in Cart (<span x-text="result.products.length"></span>)
+                                </div>
+                                <div class="divide-y divide-gray-100">
+                                    <template x-for="prod in result.products" :key="prod.id">
+                                        <div class="px-5 py-3">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-sm font-medium text-gray-900" x-text="prod.name"></span>
+                                                <span class="text-xs font-mono text-gray-400" x-text="prod.id"></span>
+                                            </div>
+                                            <template x-if="prod.children && prod.children.length > 0">
+                                                <div class="mt-1 ml-4 space-y-0.5">
+                                                    <template x-for="child in prod.children" :key="child.id">
+                                                        <div class="text-xs text-gray-500">
+                                                            └ <span x-text="child.name"></span>
+                                                            <span class="font-mono text-gray-400 ml-1" x-text="child.id"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Execution Steps Log -->
+                        <template x-if="result.steps && result.steps.length > 0">
+                            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div class="px-5 py-3 border-b border-gray-100 font-bold text-sm text-brand-dark">Execution Log</div>
+                                <div class="divide-y divide-gray-50">
+                                    <template x-for="(step, i) in result.steps" :key="i">
+                                        <div class="px-5 py-2 flex items-start gap-3 text-xs">
+                                            <span :class="{
+                                                'text-green-600': step.status === 'ok',
+                                                'text-red-600': step.status === 'error',
+                                                'text-gray-400': step.status === 'skip'
+                                            }" class="mt-0.5 font-bold shrink-0"
+                                            x-text="step.status === 'ok' ? '✓' : (step.status === 'error' ? '✗' : '–')">
+                                            </span>
+                                            <div>
+                                                <span class="font-medium text-gray-700" x-text="step.label"></span>
+                                                <template x-if="step.detail">
+                                                    <span class="ml-2 text-gray-400 font-mono" x-text="step.detail"></span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Raw JSON toggle -->
+                        <div x-data="{ showRaw: false }" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                            <button @click="showRaw = !showRaw"
+                                    class="w-full px-5 py-3 text-left text-xs text-gray-400 hover:text-brand-teal transition flex items-center justify-between">
+                                <span>Raw JSON response</span>
+                                <span x-text="showRaw ? '▲' : '▼'"></span>
+                            </button>
+                            <div x-show="showRaw" class="px-5 pb-4">
+                                <pre class="text-xs font-mono bg-gray-50 rounded-lg p-4 overflow-x-auto text-gray-700"
+                                     x-text="JSON.stringify(result, null, 2)"></pre>
+                            </div>
+                        </div>
+
+                    </template>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('apiTest', () => ({
+                selectedPersonaId: '',
+                selectedOpportunityId: '',
+                opportunities: [],
+                oppPage: 1,
+                oppPageSize: 10,
+                priceLists: [],
+                isLoading: false,
+
+                quoteName: 'API Test — {{ $testModule->display_name }}',
+                priceListId: '',
+                currency: 'IDR',
+                recordTypeId: '012MS000000GkkxYAC',
+                productCount: 3,
+                randomizeAttributes: true,
+                overridePricing: false,
+                otcOverride: null,
+                rcOverride: null,
+
+                running: false,
+                result: null,
+
+                paginatedOpportunities() {
+                    const start = (this.oppPage - 1) * this.oppPageSize;
+                    return this.opportunities.slice(start, start + this.oppPageSize);
+                },
+
+                async fetchOpportunities() {
+                    this.oppPage = 1;
+                    this.isLoading = true;
+                    try {
+                        let query = `SELECT Id, Name, StageName, Owner.Name FROM Opportunity WHERE (StageName = 'Scoping' OR StageName = 'Quoting') ORDER BY CreatedDate DESC LIMIT 100`;
+                        const res = await axios.post('/cpq-simulator/proxy', {
+                            method: 'GET',
+                            endpoint: `/services/data/v66.0/query?q=${encodeURIComponent(query)}`,
+                            persona_id: this.selectedPersonaId || null,
+                            payload: null,
+                        }, { timeout: 30000 });
+                        if (res.data?.data?.records) {
+                            this.opportunities = res.data.data.records;
+                        } else {
+                            alert('Failed to load opportunities.');
+                        }
+                    } catch (e) {
+                        alert(`Error: ${e.message}`);
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async fetchPriceLists() {
+                    if (this.priceLists.length > 0) return;
+                    this.isLoading = true;
+                    try {
+                        const q = `SELECT Id, Name FROM vlocity_cmt__PriceList__c WHERE vlocity_cmt__IsActive__c = true LIMIT 50`;
+                        const res = await axios.post('/cpq-simulator/proxy', {
+                            method: 'GET',
+                            endpoint: `/services/data/v66.0/query?q=${encodeURIComponent(q)}`,
+                            persona_id: this.selectedPersonaId || null,
+                            payload: null,
+                        }, { timeout: 30000 });
+                        if (res.data?.data?.records) {
+                            this.priceLists = res.data.data.records;
+                            const preferred = this.priceLists.find(p => p.Name.toLowerCase().includes('idr b2b'));
+                            this.priceListId = preferred ? preferred.Id : (this.priceLists[0]?.Id ?? '');
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async runTest() {
+                    this.running = true;
+                    this.result = null;
+                    try {
+                        const payload = {
+                            opportunity_id:       this.selectedOpportunityId,
+                            quote_name:           this.quoteName,
+                            price_list_id:        this.priceListId,
+                            currency:             this.currency,
+                            record_type_id:       this.recordTypeId,
+                            product_count:        this.productCount,
+                            randomize_attributes: this.randomizeAttributes ? 1 : 0,
+                            override_pricing:     this.overridePricing ? 1 : 0,
+                            otc_override:         this.overridePricing ? this.otcOverride : null,
+                            rc_override:          this.overridePricing ? this.rcOverride  : null,
+                            persona_id:           this.selectedPersonaId || null,
+                        };
+
+                        const res = await axios.post('{{ route('test-suite.api-test.run', $testModule) }}', payload, {
+                            timeout: 300000,
+                            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }
+                        });
+                        this.result = res.data;
+                    } catch (e) {
+                        this.result = { error: e.response?.data?.message ?? e.message, success: false, steps: [], assertions: [] };
+                    } finally {
+                        this.running = false;
+                    }
+                },
+            }));
+        });
+    </script>
+
+</x-app-layout>

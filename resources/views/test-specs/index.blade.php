@@ -59,6 +59,7 @@
                     <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                         <tr>
                             <th class="px-6 py-3 text-left">Display Name</th>
+                            <th class="px-6 py-3 text-left">Type</th>
                             <th class="px-6 py-3 text-left">Runner Key</th>
                             <th class="px-6 py-3 text-left">File Path</th>
                             <th class="px-6 py-3 text-left">Description</th>
@@ -70,6 +71,13 @@
                         @forelse($specs as $spec)
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3 font-semibold text-brand-dark">{{ $spec->display_name }}</td>
+                            <td class="px-6 py-3">
+                                @if($spec->test_type === 'api')
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-teal text-white">API</span>
+                                @else
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-200 text-gray-600">UI</span>
+                                @endif
+                            </td>
                             <td class="px-6 py-3">
                                 <code class="text-xs bg-gray-100 px-2 py-0.5 rounded font-mono text-gray-700">{{ $spec->runner_key }}</code>
                             </td>
@@ -94,7 +102,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="6" class="px-6 py-12 text-center text-gray-400 text-sm">
+                            <td colspan="7" class="px-6 py-12 text-center text-gray-400 text-sm">
                                 No spec files defined yet. Click "+ Add Spec" to get started.
                             </td>
                         </tr>
@@ -113,20 +121,29 @@
             <form method="POST" action="{{ route('test-specs.store') }}" class="space-y-4">
                 @csrf
                 <div>
+                    <x-input-label for="add_test_type" value="Test Type" />
+                    <select id="add_test_type" name="test_type"
+                            onchange="toggleUiFields('add', this.value)"
+                            class="mt-1 block w-full border-gray-300 focus:border-brand-teal focus:ring-brand-teal rounded-md shadow-sm text-sm">
+                        <option value="ui">UI / Playwright</option>
+                        <option value="api">API / Salesforce</option>
+                    </select>
+                </div>
+                <div>
                     <x-input-label for="add_display_name" value="Display Name" />
                     <x-text-input id="add_display_name" name="display_name" type="text" class="mt-1 block w-full"
                         placeholder="e.g. Account Management" required />
                 </div>
-                <div>
+                <div id="add_runner_key_wrap">
                     <x-input-label for="add_runner_key" value="Runner Key" />
                     <x-text-input id="add_runner_key" name="runner_key" type="text" class="mt-1 block w-full font-mono"
-                        placeholder="e.g. account_mgmt" required />
+                        placeholder="e.g. account_mgmt" />
                     <p class="mt-1 text-xs text-gray-400">Sent to the runner as <code class="bg-gray-100 px-1 rounded">{"modules": ["runner_key"]}</code></p>
                 </div>
-                <div>
+                <div id="add_file_path_wrap">
                     <x-input-label for="add_file_path" value="File Path" />
                     <x-text-input id="add_file_path" name="file_path" type="text" class="mt-1 block w-full font-mono"
-                        placeholder="e.g. tests/non-ida/01-account-mgmt.spec.js" required />
+                        placeholder="e.g. tests/non-ida/01-account-mgmt.spec.js" />
                 </div>
                 <div>
                     <x-input-label for="add_description" value="Description (optional)" />
@@ -150,17 +167,26 @@
                 @csrf
                 <input type="hidden" name="_method" value="PUT">
                 <div>
+                    <x-input-label for="edit_test_type" value="Test Type" />
+                    <select id="edit_test_type" name="test_type"
+                            onchange="toggleUiFields('edit', this.value)"
+                            class="mt-1 block w-full border-gray-300 focus:border-brand-teal focus:ring-brand-teal rounded-md shadow-sm text-sm">
+                        <option value="ui">UI / Playwright</option>
+                        <option value="api">API / Salesforce</option>
+                    </select>
+                </div>
+                <div>
                     <x-input-label for="edit_display_name" value="Display Name" />
                     <x-text-input id="edit_display_name" name="display_name" type="text" class="mt-1 block w-full" required />
                 </div>
-                <div>
+                <div id="edit_runner_key_wrap">
                     <x-input-label for="edit_runner_key" value="Runner Key" />
-                    <x-text-input id="edit_runner_key" name="runner_key" type="text" class="mt-1 block w-full font-mono" required />
+                    <x-text-input id="edit_runner_key" name="runner_key" type="text" class="mt-1 block w-full font-mono" />
                     <p class="mt-1 text-xs text-gray-400">Sent to the runner as <code class="bg-gray-100 px-1 rounded">{"modules": ["runner_key"]}</code></p>
                 </div>
-                <div>
+                <div id="edit_file_path_wrap">
                     <x-input-label for="edit_file_path" value="File Path" />
-                    <x-text-input id="edit_file_path" name="file_path" type="text" class="mt-1 block w-full font-mono" required />
+                    <x-text-input id="edit_file_path" name="file_path" type="text" class="mt-1 block w-full font-mono" />
                 </div>
                 <div>
                     <x-input-label for="edit_description" value="Description (optional)" />
@@ -183,12 +209,22 @@
         function closeModal(id) {
             document.getElementById(id).classList.remove('active');
         }
+        function toggleUiFields(prefix, type) {
+            const isApi = type === 'api';
+            ['runner_key_wrap', 'file_path_wrap'].forEach(id => {
+                document.getElementById(`${prefix}_${id}`).style.display = isApi ? 'none' : '';
+            });
+        }
+
         function openEditModal(spec) {
+            const type = spec.test_type ?? 'ui';
+            document.getElementById('edit_test_type').value    = type;
             document.getElementById('edit_display_name').value = spec.display_name ?? '';
             document.getElementById('edit_runner_key').value   = spec.runner_key ?? '';
             document.getElementById('edit_file_path').value    = spec.file_path ?? '';
             document.getElementById('edit_description').value  = spec.description ?? '';
             document.getElementById('edit-spec-form').action   = `/test-specs/${spec.id}`;
+            toggleUiFields('edit', type);
             openModal('edit-spec-modal');
         }
     </script>
