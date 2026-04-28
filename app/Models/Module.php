@@ -16,4 +16,9 @@ class Module extends Model
     {
         return $this->hasMany(TestCase::class);
     }
+
+    public function testModules()
+    {
+        return $this->belongsToMany(TestModule::class, 'module_test_module');
+    }
 }

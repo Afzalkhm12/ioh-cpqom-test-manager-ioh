@@ -14,10 +14,21 @@ class ModuleController extends Controller
 
     public function show(\App\Models\Module $module)
     {
-        $module->load(['testCases.testRuns' => function($query) {
-            $query->latest()->take(5);
-        }]);
-        $sfUsers = \App\Models\SalesforceUser::all();
-        return view('modules.show', compact('module', 'sfUsers'));
+        $module->load(['testModules.spec']);
+        $testModules = \App\Models\TestModule::orderBy('display_name')->get();
+        return view('modules.show', compact('module', 'testModules'));
+    }
+
+    public function linkTestSuite(Request $request, \App\Models\Module $module)
+    {
+        $request->validate([
+            'test_module_ids'   => 'nullable|array',
+            'test_module_ids.*' => 'exists:test_modules,id',
+        ]);
+
+        $module->testModules()->sync($request->input('test_module_ids', []));
+
+        return redirect()->route('modules.show', $module)
+            ->with('success', 'Test suites updated.');
     }
 }

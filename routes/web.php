@@ -48,6 +48,7 @@ Route::middleware('auth')->group(function () {
     
     // Modules & Test Cases
     Route::resource('modules', App\Http\Controllers\ModuleController::class);
+    Route::put('/modules/{module}/link-test-suite', [App\Http\Controllers\ModuleController::class, 'linkTestSuite'])->name('modules.link-test-suite');
     Route::resource('modules.test-cases', App\Http\Controllers\TestCaseController::class);
     Route::resource('test-runs', App\Http\Controllers\TestRunController::class)->only(['index', 'show', 'store']);
 });
