@@ -11,6 +11,8 @@ class TestModule extends Model
     protected $fillable = [
         'module_key',
         'display_name',
+        'category',
+        'salesforce_module',
         'counter',
         'default_credential_id',
         'description',

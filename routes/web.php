@@ -28,6 +28,9 @@ Route::middleware('auth')->group(function () {
 
     // Test Suite
     Route::get('/test-suite', [App\Http\Controllers\TestSuiteController::class, 'index'])->name('test-suite.index');
+    Route::get('/test-suite/import', [App\Http\Controllers\TestSuiteImportController::class, 'index'])->name('test-suite.import.index');
+    Route::post('/test-suite/import/preview', [App\Http\Controllers\TestSuiteImportController::class, 'preview'])->name('test-suite.import.preview');
+    Route::post('/test-suite/import/confirm', [App\Http\Controllers\TestSuiteImportController::class, 'confirm'])->name('test-suite.import.confirm');
     Route::get('/test-suite/{testModule}', [App\Http\Controllers\TestSuiteController::class, 'show'])->name('test-suite.show');
     Route::post('/test-suite/{testModule}/counter/increment', [App\Http\Controllers\TestSuiteController::class, 'incrementCounter'])->name('test-suite.counter.increment');
     Route::post('/test-suite/{testModule}/counter/reset', [App\Http\Controllers\TestSuiteController::class, 'resetCounter'])->name('test-suite.counter.reset');

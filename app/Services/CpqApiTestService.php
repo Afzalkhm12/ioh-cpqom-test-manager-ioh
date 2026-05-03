@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\SalesforceUser;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class CpqApiTestService
@@ -56,36 +55,42 @@ class CpqApiTestService
                 return $res;
             };
 
-            // ── Step 1: Create Quote ──────────────────────────────────────
-            $createRes = $call('POST', '/services/apexrest/vlocity_cmt/v2/carts', [
-                'methodName'  => 'createCart',
-                'objectType'  => 'Quote',
-                'subaction'   => 'createQuote',
-                'fields'      => 'Id,Name',
-                'filters'     => 'Account.vlocity_cmt__Status__c:Inactive_Active_Pending',
-                'inputFields' => [
-                    ['OpportunityId'                => $config['opportunity_id']],
-                    ['Name'                         => $config['quote_name']],
-                    ['vlocity_cmt__PriceListId__c'  => $config['price_list_id']],
-                    ['CurrencyIsoCode'              => $config['currency']],
-                    ['RecordTypeId'                 => $config['record_type_id']],
-                ],
-            ]);
+            // ── Step 1: Create Quote (skipped if cart_id already provided) ──
+            $cartId = $config['cart_id'] ?? null;
 
-            if (!$createRes->successful()) {
-                return $this->fail('Create Quote failed', $createRes->json() ?? $createRes->body(), $steps);
+            if ($cartId) {
+                $steps[] = ['label' => 'Create Quote', 'status' => 'ok', 'detail' => "Using existing cartId: {$cartId}"];
+            } else {
+                $createRes = $call('POST', '/services/apexrest/vlocity_cmt/v2/carts', [
+                    'methodName'  => 'createCart',
+                    'objectType'  => 'Quote',
+                    'subaction'   => 'createQuote',
+                    'fields'      => 'Id,Name',
+                    'filters'     => 'Account.vlocity_cmt__Status__c:Inactive_Active_Pending',
+                    'inputFields' => [
+                        ['OpportunityId'                => $config['opportunity_id']],
+                        ['Name'                         => $config['quote_name']],
+                        ['vlocity_cmt__PriceListId__c'  => $config['price_list_id']],
+                        ['CurrencyIsoCode'              => $config['currency']],
+                        ['RecordTypeId'                 => $config['record_type_id']],
+                    ],
+                ]);
+
+                if (!$createRes->successful()) {
+                    return $this->fail('Create Quote failed', $createRes->json() ?? $createRes->body(), $steps);
+                }
+
+                $cartData = $createRes->json();
+                $cartId   = $cartData['cartId']
+                    ?? ($cartData['records'][0]['Id'] ?? null)
+                    ?? $cartData['Id']
+                    ?? null;
+
+                if (!$cartId) {
+                    return $this->fail('Create Quote: could not extract cartId', $cartData, $steps);
+                }
+                $steps[] = ['label' => 'Create Quote', 'status' => 'ok', 'detail' => "cartId: {$cartId}"];
             }
-
-            $cartData = $createRes->json();
-            $cartId   = $cartData['cartId']
-                ?? ($cartData['records'][0]['Id'] ?? null)
-                ?? $cartData['Id']
-                ?? null;
-
-            if (!$cartId) {
-                return $this->fail('Create Quote: could not extract cartId', $cartData, $steps);
-            }
-            $steps[] = ['label' => 'Create Quote', 'status' => 'ok', 'detail' => "cartId: {$cartId}"];
 
             // ── Step 2+3: Determine which products to add ────────────────
             $quantity      = max(1, (int) ($config['product_quantity'] ?? 1));
@@ -102,18 +107,15 @@ class CpqApiTestService
                     'detail' => $expectedCount . ' product(s): ' . implode(', ', array_column($selected, 'Name'))];
             } else {
                 $priceListId = $config['price_list_id'];
-                $cacheKey    = "cpq_root_products_{$priceListId}";
 
-                // Use the shared priceList-scoped cache; populate from this cart if it's a miss.
-                $allProducts = Cache::remember($cacheKey, 86400, function () use ($call, $cartId, $priceListId) {
-                    $res = $call('GET', "/services/apexrest/vlocity_cmt/v2/cpq/carts/{$cartId}/products"
-                        . "?hierarchy=0&pagesize=200&includeAttachment=false&includeAttributes=true"
-                        . "&priceListId={$priceListId}");
-                    return array_map(fn($p) => [
-                        'Id'   => is_array($p['Id'] ?? null) ? ($p['Id']['value'] ?? '') : ($p['Id'] ?? ''),
-                        'Name' => $p['Product2']['Name'] ?? $p['Name'] ?? '',
-                    ], $res->json()['records'] ?? []);
-                });
+                $res = $call('GET', "/services/apexrest/vlocity_cmt/v2/cpq/carts/{$cartId}/products"
+                    . "?hierarchy=0&pagesize=200&includeAttachment=false&includeAttributes=true"
+                    . "&priceListId={$priceListId}");
+
+                $allProducts = array_map(fn($p) => [
+                    'Id'   => is_array($p['Id'] ?? null) ? ($p['Id']['value'] ?? '') : ($p['Id'] ?? ''),
+                    'Name' => $p['Product2']['Name'] ?? $p['Name'] ?? '',
+                ], $res->json()['records'] ?? []);
 
                 if (empty($allProducts)) {
                     return $this->fail('No root products found for this price list', null, $steps);
@@ -138,12 +140,30 @@ class CpqApiTestService
                     'items'    => [['itemId' => $itemId, 'quantity' => $quantity]],
                 ]);
 
-                $prodName = $prod['Product2']['Name'] ?? $prod['Name'] ?? $itemId;
-                if (!$addRes->successful()) {
-                    $steps[] = ['label' => "Add Product: {$prodName}", 'status' => 'error', 'detail' => $addRes->body()];
+                $prodName  = $prod['Product2']['Name'] ?? $prod['Name'] ?? $itemId;
+                $addBody   = $addRes->json() ?? $addRes->body();
+                $addStatus = $addRes->successful() ? 'ok' : 'error';
+
+                // Some CPQ endpoints return HTTP 200 but embed an error or a jobId in the body
+                if ($addRes->successful()) {
+                    $bodyCartId = $addBody['cartId'] ?? null;
+                    $jobId      = $addBody['JobId']  ?? $addBody['jobId'] ?? null;
+                    $sfError    = $addBody['error']   ?? $addBody['message'] ?? null;
+
+                    if ($sfError) {
+                        $addStatus = 'error';
+                    }
+                    $detail = json_encode(array_filter([
+                        'cartId' => $bodyCartId,
+                        'jobId'  => $jobId,
+                        'error'  => $sfError,
+                        'status' => $addBody['status'] ?? null,
+                    ]));
                 } else {
-                    $steps[] = ['label' => "Add Product: {$prodName} (qty: {$quantity})", 'status' => 'ok', 'detail' => ''];
+                    $detail = $addRes->body();
                 }
+
+                $steps[] = ['label' => "Add Product: {$prodName} (qty: {$quantity})", 'status' => $addStatus, 'detail' => $detail];
             }
 
             // ── Step 5: Load Cart Items (for attributes + pricing) ────────

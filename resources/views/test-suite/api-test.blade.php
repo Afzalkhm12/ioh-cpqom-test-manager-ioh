@@ -469,6 +469,7 @@
                 otcOverride: null,
                 rcOverride: null,
 
+                cartId: null,
                 running: false,
                 result: null,
 
@@ -509,7 +510,7 @@
 
                 async fetchRecordTypeId() {
                     try {
-                        const q = `SELECT Id FROM RecordType WHERE DeveloperName = 'WorkingCart' AND SobjectType = 'Quote' LIMIT 1`;
+                        const q = `SELECT Id FROM RecordType WHERE DeveloperName = 'EnterpriseQuote' AND SobjectType = 'Quote' LIMIT 1`;
                         const res = await axios.post('/cpq-simulator/proxy', {
                             method: 'GET',
                             endpoint: `/services/data/v66.0/query?q=${encodeURIComponent(q)}`,
@@ -546,14 +547,46 @@
                     }
                     this.isLoading = true;
                     try {
+                        // Step 1: create the quote/cart so we have a real cartId
+                        if (!this.cartId || forceRefresh) {
+                            const createRes = await axios.post('/cpq-simulator/proxy', {
+                                method:     'POST',
+                                endpoint:   '/services/apexrest/vlocity_cmt/v2/carts',
+                                persona_id: this.selectedPersonaId || null,
+                                payload: {
+                                    methodName:  'createCart',
+                                    objectType:  'Quote',
+                                    subaction:   'createQuote',
+                                    fields:      'Id,Name',
+                                    filters:     'Account.vlocity_cmt__Status__c:Inactive_Active_Pending',
+                                    inputFields: [
+                                        { OpportunityId:                this.selectedOpportunityId },
+                                        { Name:                         this.quoteName },
+                                        { 'vlocity_cmt__PriceListId__c': this.priceListId },
+                                        { CurrencyIsoCode:              this.currency },
+                                        ...(this.recordTypeId ? [{ RecordTypeId: this.recordTypeId }] : []),
+                                    ],
+                                },
+                            }, { timeout: 60000 });
+
+                            const cartData = createRes.data?.data;
+                            this.cartId = cartData?.cartId
+                                || cartData?.records?.[0]?.Id
+                                || cartData?.Id
+                                || null;
+
+                            if (!this.cartId) {
+                                throw new Error('Could not create quote — check opportunity, price list and record type.');
+                            }
+                        }
+
+                        // Step 2: fetch products using the real cartId
                         const res = await axios.get('{{ route('cpq-simulator.root-products') }}', {
                             params: {
-                                price_list_id:  this.priceListId,
-                                opportunity_id: this.selectedOpportunityId,
-                                currency:       this.currency,
-                                record_type_id: this.recordTypeId || null,
-                                persona_id:     this.selectedPersonaId || null,
-                                force_refresh:  forceRefresh ? 1 : 0,
+                                cart_id:      this.cartId,
+                                price_list_id: this.priceListId,
+                                persona_id:   this.selectedPersonaId || null,
+                                force_refresh: forceRefresh ? 1 : 0,
                             },
                             timeout: 60000,
                         });
@@ -610,6 +643,7 @@
                     try {
                         const payload = {
                             opportunity_id:       this.selectedOpportunityId,
+                            cart_id:              this.cartId || null,
                             quote_name:           this.quoteName,
                             price_list_id:        this.priceListId,
                             currency:             this.currency,
@@ -634,6 +668,10 @@
                         this.result = { error: e.response?.data?.message ?? e.message, success: false, steps: [], assertions: [] };
                     } finally {
                         this.running = false;
+                        // Reset cart so next run creates a fresh quote instead of adding to the same one
+                        this.cartId = null;
+                        this.availableProducts = [];
+                        this.selectedProducts = [];
                     }
                 },
             }));

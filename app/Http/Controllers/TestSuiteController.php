@@ -15,9 +15,10 @@ class TestSuiteController extends Controller
 
     public function index()
     {
-        $modules      = TestModule::withCount('testParameters')->orderBy('module_key')->get();
+        $modules      = TestModule::withCount('testParameters')->orderBy('display_name')->get();
+        $categories   = $modules->pluck('category')->filter()->unique()->sort()->values();
         $runtimeState = RuntimeState::orderBy('state_key')->get();
-        return view('test-suite.index', compact('modules', 'runtimeState'));
+        return view('test-suite.index', compact('modules', 'categories', 'runtimeState'));
     }
 
     // ── Module detail (test cases) ─────────────────────────────────────────

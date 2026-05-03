@@ -240,6 +240,13 @@
                                             <div class="divide-y divide-gray-100">
                                                 {{-- Existing key-value rows --}}
                                                 @foreach($tp->parameters ?? [] as $key => $value)
+                                                @php
+                                                    $isNested    = is_array($value) && collect($value)->contains(fn($v) => is_array($v));
+                                                    $isFlatArray = is_array($value) && !$isNested;
+                                                    $displayValue = $isNested
+                                                        ? json_encode($value)
+                                                        : ($isFlatArray ? implode(', ', $value) : $value);
+                                                @endphp
                                                 <div class="flex items-center gap-3 px-4 py-2.5"
                                                     x-show="!disabled['{{ $key }}']">
                                                     <span class="w-1/3 font-mono text-xs text-gray-600 font-semibold shrink-0 truncate"
@@ -247,15 +254,18 @@
                                                     <input
                                                         type="text"
                                                         name="parameters[{{ $key }}]"
-                                                        value="{{ is_array($value) ? implode(', ', $value) : $value }}"
+                                                        value="{{ $displayValue }}"
                                                         :disabled="disabled['{{ $key }}']"
-                                                        class="flex-1 text-sm border-gray-200 rounded-lg focus:border-brand-teal focus:ring-brand-teal py-1.5"
-                                                        @if(is_array($value))
+                                                        @if($isNested) readonly @endif
+                                                        class="flex-1 text-sm border-gray-200 rounded-lg focus:border-brand-teal focus:ring-brand-teal py-1.5 {{ $isNested ? 'font-mono text-xs bg-gray-50 text-gray-400 cursor-default' : '' }}"
+                                                        @if($isFlatArray)
                                                         title="Array: separate multiple values with a comma"
                                                         placeholder="val1, val2, …"
                                                         @endif
                                                     >
-                                                    @if(is_array($value))
+                                                    @if($isNested)
+                                                        <span class="text-xs text-gray-300 shrink-0">json</span>
+                                                    @elseif($isFlatArray)
                                                         <span class="text-xs text-purple-400 shrink-0">array</span>
                                                     @elseif(is_numeric($value))
                                                         <span class="text-xs text-blue-400 shrink-0">num</span>

@@ -15,27 +15,78 @@
             @endif
 
             {{-- ── Module Cards ──────────────────────────────────────────── --}}
-            <div>
-                <h3 class="text-lg font-bold text-brand-dark mb-4">Spec Modules</h3>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div x-data="{ activeCategory: '{{ $categories->first() ?? 'all' }}' }">
+
+                {{-- Header + Import button --}}
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-brand-dark">Spec Modules</h3>
+                    <a href="{{ route('test-suite.import.index') }}"
+                        class="text-xs px-3 py-1.5 border border-brand-teal text-brand-teal rounded-lg font-semibold hover:bg-brand-teal hover:text-white transition">
+                        Import from Excel
+                    </a>
+                </div>
+
+                {{-- Category filter pills --}}
+                @if($categories->isNotEmpty())
+                <div class="flex flex-wrap gap-2 mb-5">
+                    <button
+                        @click="activeCategory = 'all'"
+                        :class="activeCategory === 'all'
+                            ? 'bg-brand-teal text-white border-brand-teal'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand-teal hover:text-brand-teal'"
+                        class="text-xs px-3 py-1.5 border rounded-full font-semibold transition">
+                        All
+                    </button>
+                    @foreach($categories as $cat)
+                    <button
+                        @click="activeCategory = '{{ $cat }}'"
+                        :class="activeCategory === '{{ $cat }}'
+                            ? 'bg-brand-teal text-white border-brand-teal'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand-teal hover:text-brand-teal'"
+                        class="text-xs px-3 py-1.5 border rounded-full font-semibold transition">
+                        {{ $cat }}
+                    </button>
+                    @endforeach
+                </div>
+                @endif
+
+                {{-- Module cards grid --}}
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-2">
                     @foreach($modules as $module)
-                    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
-                        <div>
-                            <div class="flex items-start justify-between mb-3">
-                                <span class="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{{ $module->module_key }}</span>
-                                <span class="text-xs text-gray-400">{{ $module->test_parameters_count }} cases</span>
+                    <div
+                        x-show="activeCategory === 'all' || activeCategory === '{{ $module->category }}'"
+                        class="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
+
+                        {{-- Card body --}}
+                        <div class="p-6 flex-1">
+                            {{-- Category + case count --}}
+                            <div class="flex items-center justify-between mb-4">
+                                @if($module->category)
+                                    <span class="text-xs py-0.5 rounded-full bg-brand-teal/10 text-brand-teal font-semibold">
+                                        {{ $module->category }}
+                                    </span>
+                                @else
+                                    <span></span>
+                                @endif
+                                <span class="text-xs text-gray-400 font-medium">{{ $module->test_parameters_count }} {{ Str::plural('case', $module->test_parameters_count) }}</span>
                             </div>
-                            <h4 class="font-bold text-brand-dark text-base leading-snug">{{ $module->display_name }}</h4>
+
+                            {{-- Title as link --}}
+                            <a href="{{ route('test-suite.show', $module) }}"
+                                class="block font-bold text-brand-dark text-base leading-snug hover:text-brand-teal transition-colors">
+                                {{ $module->display_name }}
+                            </a>
+
                             @if($module->description)
-                                <p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ $module->description }}</p>
+                                <p class="text-xs text-gray-400 mt-1.5 line-clamp-2">{{ $module->description }}</p>
                             @endif
                         </div>
 
                         {{-- Counter --}}
-                        <div class="mt-4 pt-4 border-t border-gray-100">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs text-gray-500 font-medium uppercase tracking-wide">Run Counter</span>
-                                <span class="text-2xl font-extrabold text-brand-teal">{{ $module->counter }}</span>
+                        <div class="px-6 pb-6 pt-5 border-t border-gray-100">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-xs text-gray-400 font-semibold uppercase tracking-widest">Run Counter</span>
+                                <span class="text-2xl font-extrabold text-brand-teal tabular-nums">{{ $module->counter }}</span>
                             </div>
                             <div class="flex gap-2">
                                 <form method="POST" action="{{ route('test-suite.counter.increment', $module) }}" class="flex-1">
@@ -47,17 +98,12 @@
                                 <form method="POST" action="{{ route('test-suite.counter.reset', $module) }}"
                                     onsubmit="return confirm('Reset counter to 0?')">
                                     @csrf
-                                    <button class="text-xs px-2 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition">
+                                    <button class="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition">
                                         Reset
                                     </button>
                                 </form>
                             </div>
                         </div>
-
-                        <a href="{{ route('test-suite.show', $module) }}"
-                            class="mt-3 block text-center text-xs font-semibold text-brand-teal hover:underline">
-                            Edit Test Cases →
-                        </a>
                     </div>
                     @endforeach
                 </div>

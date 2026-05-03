@@ -19,6 +19,7 @@ class QuoteApiTestController extends Controller
     {
         $request->validate([
             'opportunity_id'       => 'required|string',
+            'cart_id'              => 'nullable|string',
             'quote_name'           => 'required|string|max:255',
             'price_list_id'        => 'required|string',
             'currency'             => 'required|string|max:10',
@@ -41,7 +42,7 @@ class QuoteApiTestController extends Controller
             : null;
 
         $result = $service->runQuoteTest($request->only([
-            'opportunity_id', 'quote_name', 'price_list_id', 'currency',
+            'opportunity_id', 'cart_id', 'quote_name', 'price_list_id', 'currency',
             'record_type_id', 'product_quantity', 'selection_mode',
             'product_count', 'selected_products',
             'randomize_attributes', 'override_pricing',
