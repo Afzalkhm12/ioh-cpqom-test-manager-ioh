@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\ProductTestRun;
 use App\Models\ProductTestSuite;
 use App\Models\RuntimeState;
 use App\Models\SalesforceUser;
@@ -10,7 +11,9 @@ use App\Models\TestModule;
 use App\Models\TestParameter;
 use App\Services\CpqApiTestService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ProductTestSuiteController extends Controller
 {
@@ -64,14 +67,29 @@ class ProductTestSuiteController extends Controller
     {
         $productTestSuite->load(['product', 'modules']);
 
-        // Annotate each module with whether it has a tc_quote parameter
         $moduleIds = $productTestSuite->modules->pluck('id');
-        $tcQuoteExists = TestParameter::whereIn('module_id', $moduleIds)
-            ->where('test_case_id', 'tc_quote')
-            ->pluck('module_id')
-            ->flip();
 
-        return view('product-test-suites.show', compact('productTestSuite', 'tcQuoteExists'));
+        // Latest run per module — groupBy then first() so the DESC order is respected
+        $latestRuns = ProductTestRun::where('product_test_suite_id', $productTestSuite->id)
+            ->whereIn('test_module_id', $moduleIds)
+            ->orderByDesc('started_at')
+            ->get()
+            ->groupBy('test_module_id')
+            ->map(fn($runs) => $runs->first());
+
+        $salesforceUrl = rtrim(env('SALESFORCE_URL', ''), '/');
+
+        $totalModules  = $productTestSuite->modules->count();
+        $passedCount   = $latestRuns->where('validation_status', 'passed')->count();
+        $notPassedCount = $latestRuns->where('validation_status', 'not_passed')->count();
+        $errorCount    = $latestRuns->whereIn('status', ['error', 'aborted'])->where('validation_status', null)->count();
+        $runningCount  = $latestRuns->where('status', 'running')->count();
+        $notRunCount   = $totalModules - $latestRuns->count();
+
+        return view('product-test-suites.show', compact(
+            'productTestSuite', 'latestRuns', 'salesforceUrl',
+            'totalModules', 'passedCount', 'notPassedCount', 'errorCount', 'runningCount', 'notRunCount'
+        ));
     }
 
     public function edit(ProductTestSuite $productTestSuite)
@@ -199,6 +217,11 @@ class ProductTestSuiteController extends Controller
     public function runModule(ProductTestSuite $productTestSuite, TestModule $testModule)
     {
         $productTestSuite->load('product');
+        $testModule->load('spec');
+
+        if (! $testModule->spec) {
+            return response()->json(['error' => 'No spec assigned to this module.'], 422);
+        }
 
         // 1. Write productCode into tc_quote TestParameter
         $param = TestParameter::firstOrNew([
@@ -210,26 +233,68 @@ class ProductTestSuiteController extends Controller
         ]);
         $param->save();
 
-        // 2. Run via automation runner (same as TestSuiteController@runSpec)
-        $testModule->load('spec');
+        // 2. Create a run record
+        $run = ProductTestRun::create([
+            'product_test_suite_id' => $productTestSuite->id,
+            'test_module_id'        => $testModule->id,
+            'status'                => 'running',
+            'started_at'            => Carbon::now(),
+        ]);
 
-        if (! $testModule->spec) {
-            return response()->json(['error' => 'No spec assigned to this module.'], 422);
-        }
-
+        // 3. Call automation runner — runner responds immediately with { status: "running" },
+        //    spec executes async and writes back to product_test_runs directly via DB.
         $runnerUrl = rtrim(env('AUTOMATION_RUNNER_URL', 'http://localhost:3333'), '/') . '/run';
 
         try {
-            $response = Http::timeout(60)->post($runnerUrl, [
+            $payload = [
+                'run_id'  => $run->id,
                 'modules' => [$testModule->spec->runner_key],
+            ];
+            Log::info('ProductTestSuite runModule → runner', ['url' => $runnerUrl, 'payload' => $payload]);
+
+            $response = Http::timeout(60)->post($runnerUrl, $payload);
+
+            $body = $response->json() ?? $response->body();
+
+            if ($response->successful()) {
+                // Runner accepted — Playwright spec is running async, it will update the DB on finish
+                $run->update([
+                    'runner_response' => is_array($body) ? $body : ['raw' => $body],
+                ]);
+
+                return response()->json([
+                    'run_id'    => $run->id,
+                    'status'    => 'running',
+                    'runner_id' => is_array($body) ? ($body['runId'] ?? null) : null,
+                ]);
+            }
+
+            $log = 'HTTP ' . $response->status() . ': ' . (is_string($body) ? $body : json_encode($body));
+            $run->update([
+                'status'          => 'error',
+                'runner_response' => is_array($body) ? $body : ['raw' => $body],
+                'log'             => $log,
+                'finished_at'     => Carbon::now(),
             ]);
 
             return response()->json([
-                'status' => $response->status(),
-                'body'   => $response->json() ?? $response->body(),
-            ], $response->successful() ? 200 : $response->status());
+                'run_id' => $run->id,
+                'status' => 'error',
+                'error'  => $log,
+            ], $response->status());
+
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 502);
+            $run->update([
+                'status'      => 'error',
+                'log'         => $e->getMessage(),
+                'finished_at' => Carbon::now(),
+            ]);
+
+            return response()->json([
+                'run_id' => $run->id,
+                'status' => 'error',
+                'error'  => $e->getMessage(),
+            ], 502);
         }
     }
 

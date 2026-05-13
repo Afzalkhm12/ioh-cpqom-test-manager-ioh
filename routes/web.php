@@ -7,7 +7,11 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/dashboard', [App\Http\Controllers\ModuleController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
+
+// Unauthenticated — called by Playwright/automation runner
+Route::get('/product-test-runs/{productTestRun}', [App\Http\Controllers\ProductTestRunController::class, 'show'])->name('product-test-runs.show');
+Route::put('/product-test-runs/{productTestRun}', [App\Http\Controllers\ProductTestRunController::class, 'update'])->name('product-test-runs.update');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -56,6 +60,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/product-test-suites/{productTestSuite}/run', [App\Http\Controllers\ProductTestSuiteController::class, 'run'])->name('product-test-suites.run');
     Route::post('/product-test-suites/{productTestSuite}/run/{testModule}', [App\Http\Controllers\ProductTestSuiteController::class, 'runModule'])->name('product-test-suites.run-module');
     Route::resource('product-test-suites', App\Http\Controllers\ProductTestSuiteController::class);
+    Route::post('/product-test-runs/{productTestRun}/findings', [App\Http\Controllers\ProductTestRunController::class, 'storeFinding'])->name('product-test-runs.findings.store');
 
     // Modules & Test Cases
     Route::resource('modules', App\Http\Controllers\ModuleController::class);

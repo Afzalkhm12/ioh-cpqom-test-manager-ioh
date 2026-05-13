@@ -15,14 +15,14 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
-                    <x-nav-link :href="route('object-sync.index')" :active="request()->routeIs('object-sync.*')">
+                    {{-- <x-nav-link :href="route('object-sync.index')" :active="request()->routeIs('object-sync.*')">
                         {{ __('Object Sync Manager') }}
                     </x-nav-link>
                     <x-nav-link :href="route('cpq-simulator.index')" :active="request()->routeIs('cpq-simulator.*')">
                         {{ __('CPQ Simulator') }}
-                    </x-nav-link>
+                    </x-nav-link> --}}
                     <x-nav-link :href="route('test-suite.index')" :active="request()->routeIs('test-suite.*')">
-                        {{ __('Test Suite') }}
+                        {{ __('Module Test Suite') }}
                     </x-nav-link>
                     <x-nav-link :href="route('product-test-suites.index')" :active="request()->routeIs('product-test-suites.*')">
                         {{ __('Product Suites') }}
@@ -30,10 +30,10 @@
                     <x-nav-link :href="route('test-specs.index')" :active="request()->routeIs('test-specs.*')">
                         {{ __('Spec Files') }}
                     </x-nav-link>
-                    <a href="http://localhost:8100" target="_blank" rel="noopener"
+                    {{-- <a href="http://localhost:8100" target="_blank" rel="noopener"
                        class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium leading-5 text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none focus:text-gray-700 focus:border-gray-300 transition duration-150 ease-in-out">
                         {{ __('Test Report') }}
-                    </a>
+                    </a> --}}
                 </div>
             </div>
 
