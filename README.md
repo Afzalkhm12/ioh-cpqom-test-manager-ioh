@@ -1,58 +1,104 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Salesforce Test Manager
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Internal tooling platform for QA engineers working with a Salesforce B2B CPQ/OM environment. Built with Laravel 13, PHP 8.4, and PostgreSQL.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Features
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Test Suite Manager** — organise test modules, maintain per-module JSONB parameter sets, and track shared runtime state (e.g. `opportunityId`, `quoteId`) across test runs.
+- **CPQ Simulator** — multi-step wizard UI that walks through the Vlocity CPQ quote flow by proxying API calls through the backend to avoid CORS issues.
+- **Object Sync Manager** — pull Salesforce object/field metadata via `sobjects/{apiName}/describe` and store it locally for accurate test configuration.
+- **Salesforce User (Persona) Manager** — manage Salesforce OAuth credentials per tester persona using the Web Server (authorization code + refresh token) flow.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## Requirements
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+| Requirement | Version |
+|---|---|
+| PHP | ^8.4 |
+| Composer | 2.x |
+| Node.js | 22+ |
+| PostgreSQL | 14+ |
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Local Development
 
 ```bash
-composer require laravel/boost --dev
+# 1. Install dependencies
+composer install
+npm install
 
-php artisan boost:install
+# 2. Copy and configure environment
+cp .env.example .env
+php artisan key:generate
+
+# 3. Run migrations
+php artisan migrate
+
+# 4. Start all dev services (server + queue + pail + vite)
+composer dev
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The app will be available at `http://localhost:8000`.
 
-## Contributing
+---
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Environment Variables
 
-## Code of Conduct
+| Variable | Purpose |
+|---|---|
+| `DB_CONNECTION=pgsql` | PostgreSQL; DB name `sfdc_test_manager` |
+| `SALESFORCE_URL` | Base SF instance URL — **no trailing slash** |
+| `SALESFORCE_CLIENT_ID` | Connected App consumer key |
+| `SALESFORCE_CLIENT_SECRET` | Connected App consumer secret |
+| `QUEUE_CONNECTION=database` | Queued jobs stored in PostgreSQL |
+| `CACHE_STORE=database` | Cache stored in PostgreSQL |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+## Docker / Production Deployment
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+The project ships with a multi-stage `Dockerfile`:
 
-## License
+- **Stage 1** (`node:22-alpine`) — installs npm dependencies and runs `vite build`
+- **Stage 2** (`php:8.4-fpm-alpine`) — installs Composer dependencies, runs nginx + php-fpm via supervisord
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+The app is served on **port 1100**.
+
+```bash
+# Build the image
+docker build -t sfdc-test-manager .
+
+# Run (pass env vars from a file or directly)
+docker run -p 1100:1100 --env-file .env sfdc-test-manager
+```
+
+Supporting config files live in [.docker/](.docker/):
+- `nginx.conf` — serves Laravel from `/app/public`, proxies PHP to php-fpm on port 9000
+- `supervisord.conf` — manages nginx and php-fpm processes
+
+> **Note:** The `.env` file is excluded from the Docker image (see `.dockerignore`). Inject all environment variables at runtime via your deployment platform (e.g. EasyPanel environment settings).
+
+---
+
+## Common Commands
+
+```bash
+# Start all dev services
+composer dev
+
+# Run migrations
+php artisan migrate
+
+# Run tests
+composer test
+
+# Lint / fix code style
+./vendor/bin/pint
+
+# Build frontend assets
+npm run build
+```

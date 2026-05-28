@@ -19,7 +19,7 @@ A **Laravel 13** web application that serves as an internal tooling platform for
 
 | Layer | Technology |
 |---|---|
-| Backend | PHP 8.3, Laravel 13 |
+| Backend | PHP 8.4, Laravel 13 |
 | Database | PostgreSQL (DB name: `sfdc_test_manager`) |
 | Frontend | Blade templates, Tailwind CSS v3, Alpine.js v3, Vite |
 | Auth (app) | Laravel Breeze (session-based) |
@@ -74,6 +74,11 @@ database/
   seeders/
 routes/
   web.php                 # All HTTP routes (auth-protected group)
+.docker/
+  nginx.conf              # Nginx config: serves public/, proxies PHP to php-fpm :9000
+  supervisord.conf        # Runs nginx + php-fpm as supervised processes
+Dockerfile                # Multi-stage: node:22-alpine (assets) → php:8.4-fpm-alpine (runtime)
+.dockerignore
 ```
 
 ---
@@ -121,6 +126,19 @@ Central service class at `app/Services/SalesforceService.php`. All HTTP calls to
 | `SALESFORCE_CLIENT_SECRET` | Connected App consumer secret |
 | `QUEUE_CONNECTION=database` | Queued jobs stored in PostgreSQL |
 | `CACHE_STORE=database` | Cache stored in PostgreSQL |
+
+---
+
+## Docker / Deployment
+
+The app is containerised with a multi-stage `Dockerfile`:
+
+- **Stage 1** — `node:22-alpine` installs npm deps and runs `vite build`
+- **Stage 2** — `php:8.4-fpm-alpine` installs Composer deps, starts nginx + php-fpm via supervisord
+
+The container exposes **port 1100**. `.env` is excluded from the image; inject all env vars at runtime via EasyPanel's environment settings.
+
+Supporting files: `.docker/nginx.conf`, `.docker/supervisord.conf`.
 
 ---
 
@@ -181,3 +199,4 @@ All routes are auth-protected (`middleware('auth')`). Route names follow Laravel
 3. **JSONB & SQLite** — The GIN index migration will fail on SQLite. Always use PostgreSQL in local dev; do not switch `DB_CONNECTION` to `sqlite` for this project.
 4. **Two module systems** — `TestModule` (new) and `Module` (legacy) coexist. The dashboard (`/dashboard`) still uses the legacy `ModuleController`. Avoid mixing them.
 5. **`SALESFORCE_URL` must have no trailing slash** — the service concatenates it with endpoint paths that start with `/`.
+6. **No `.env` in Docker image** — the `.dockerignore` excludes `.env`. All environment variables must be injected at container runtime (e.g. via EasyPanel's environment settings). Running `php artisan config:cache` inside the image at build time will bake in empty values — don't do it.
