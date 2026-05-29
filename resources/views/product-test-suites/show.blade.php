@@ -23,15 +23,15 @@
 
             statusColor(status) {
                 return {
-                    passed:     'bg-green-100 text-green-700',
-                    success:    'bg-green-100 text-green-700',
-                    failed:     'bg-red-100 text-red-700',
-                    not_passed: 'bg-red-100 text-red-700',
-                    error:      'bg-red-100 text-red-700',
-                    aborted:    'bg-yellow-100 text-yellow-700',
-                    skipped:    'bg-yellow-100 text-yellow-700',
-                    running:    'bg-blue-100 text-blue-700',
-                }[status] ?? 'bg-gray-100 text-gray-600';
+                    passed:     'bg-green-50 text-green-700 border border-green-300',
+                    success:    'bg-green-50 text-green-700 border border-green-300',
+                    failed:     'bg-red-500 text-white',
+                    not_passed: 'bg-red-50 text-red-700 border border-red-300',
+                    error:      'bg-red-500 text-white',
+                    aborted:    'bg-yellow-500 text-white',
+                    skipped:    'bg-yellow-50 text-yellow-700 border border-yellow-300',
+                    running:    'bg-blue-50 text-blue-700 border border-blue-300',
+                }[status] ?? 'bg-gray-100 text-gray-600 border border-gray-300';
             },
 
             statusLabel(status) {
@@ -159,14 +159,20 @@
 
                     @forelse($productTestSuite->modules as $module)
                     @php
-                        $lastRun          = $latestRuns->get($module->id);
-                        $initialCreatedIds  = $lastRun?->created_ids ?? [];
-                        $initialValidation  = $lastRun?->validation_status ?? null;
-                        $initialFinding     = $lastRun?->finding ?? '';
-                        $initialImages      = $lastRun?->evidence_images
+                        $lastRun           = $latestRuns->get($module->id);
+                        $initialCreatedIds = $lastRun?->created_ids ?? [];
+                        $initialValidation = $lastRun?->validation_status ?? null;
+                        $initialFinding    = $lastRun?->finding ?? '';
+                        $initialLog        = $lastRun?->log ?? null;
+                        $initialImages     = $lastRun?->evidence_images
                             ? array_map(fn($p) => \Illuminate\Support\Facades\Storage::url($p), $lastRun->evidence_images)
                             : [];
-                        $detailOpen = $lastRun && ($lastRun->created_ids || $lastRun->validation_status || $lastRun->finding);
+                        $detailOpen = $lastRun && (
+                            $lastRun->created_ids ||
+                            $lastRun->validation_status ||
+                            $lastRun->finding ||
+                            in_array($lastRun->status, ['error', 'aborted'])
+                        );
                     @endphp
                     <tbody
                         data-module-row
@@ -177,6 +183,7 @@
                             createdIds: @js($initialCreatedIds),
                             sfBaseUrl: '{{ $salesforceUrl }}',
                             finding: @js($initialFinding),
+                            log: @js($initialLog),
                             evidenceImages: @js($initialImages),
                             result: null,
                             open: {{ $detailOpen ? 'true' : 'false' }},
@@ -200,18 +207,54 @@
                                         }
                                     });
                                     const data = await res.json();
-                                    this.result = data;
                                     this.runId = data.run_id ?? null;
-                                    this.status = data.status ?? 'error';
+
+                                    if (!this.runId || data.status === 'error') {
+                                        this.status = data.status ?? 'error';
+                                        this.result = data;
+                                        this.open = true;
+                                        return;
+                                    }
+
                                     this.createdIds = {};
                                     this.validationStatus = null;
                                     this.finding = '';
+                                    this.log = null;
                                     this.evidenceImages = [];
-                                    this.open = this.status === 'error' || this.status === 'aborted';
+
+                                    await this.pollStatus(this.runId);
                                 } catch(e) {
                                     this.status = 'error';
                                     this.result = { status: 'error', error: e.message };
                                     this.open = true;
+                                }
+                            },
+
+                            async pollStatus(runId) {
+                                const terminal = ['success', 'error', 'aborted'];
+                                while (true) {
+                                    await new Promise(r => setTimeout(r, 2000));
+                                    try {
+                                        const res = await fetch('/product-test-runs/' + runId, {
+                                            headers: { 'Accept': 'application/json' }
+                                        });
+                                        const data = await res.json();
+                                        this.status = data.status;
+                                        this.createdIds = data.created_ids ?? {};
+                                        this.validationStatus = data.validation_status ?? null;
+                                        this.finding = data.finding ?? '';
+                                        this.log = data.log ?? null;
+                                        this.evidenceImages = data.evidence_images ?? [];
+                                        if (terminal.includes(data.status)) {
+                                            this.open = data.status !== 'success';
+                                            break;
+                                        }
+                                    } catch(e) {
+                                        this.status = 'error';
+                                        this.result = { status: 'error', error: e.message };
+                                        this.open = true;
+                                        break;
+                                    }
                                 }
                             },
 
@@ -314,9 +357,9 @@
                                 </span>
                                 <span x-show="status === 'idle'" class="text-xs text-gray-300 font-medium">—</span>
                                 <template x-if="status !== 'idle' && status !== 'running'">
-                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                    <div class="flex flex-col gap-1 items-start">
                                         <button @click="open = !open"
-                                            class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold capitalize cursor-pointer"
+                                            class="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-semibold capitalize cursor-pointer"
                                             :class="$root.statusColor(status)">
                                             <span x-text="$root.statusLabel(status)"></span>
                                             <svg :class="open ? 'rotate-180' : ''" class="w-3 h-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -324,9 +367,9 @@
                                             </svg>
                                         </button>
                                         <template x-if="validationStatus !== null">
-                                            <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full font-semibold"
-                                                :class="validationStatus === 'passed' ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'">
-                                                <span x-text="validationStatus === 'passed' ? 'Validated ✓' : 'Not Passed ✗'"></span>
+                                            <span class="inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-semibold"
+                                                :class="validationStatus === 'passed' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'">
+                                                <span x-text="validationStatus === 'passed' ? 'Passed ✓' : 'Not Passed ✗'"></span>
                                             </span>
                                         </template>
                                     </div>
@@ -355,13 +398,16 @@
                                     </p>
                                 </template>
 
-                                {{-- Error --}}
-                                <template x-if="result && result.error">
-                                    <p class="text-xs text-red-600 font-mono bg-red-50 rounded p-2" x-text="result.error"></p>
+                                {{-- Error / log --}}
+                                <template x-if="log">
+                                    <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                                        <p class="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">Error Log</p>
+                                        <p class="text-xs text-red-700 font-mono whitespace-pre-wrap break-all" x-text="log"></p>
+                                    </div>
                                 </template>
 
-                                {{-- Stale hint --}}
-                                <template x-if="!result && status !== 'idle' && status !== 'running' && !hasCreatedIds() && !finding">
+                                {{-- Stale hint (only when no log, no created records, no finding) --}}
+                                <template x-if="!log && !result && status !== 'idle' && status !== 'running' && !hasCreatedIds() && !finding">
                                     <p class="text-xs text-gray-400 italic">Run persisted in DB. Reload page to see latest state from Playwright.</p>
                                 </template>
 
