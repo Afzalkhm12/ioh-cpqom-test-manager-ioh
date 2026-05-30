@@ -149,6 +149,7 @@ class ProductTestSuiteController extends Controller
             $param = TestParameter::firstOrNew([
                 'module_id'    => $module->id,
                 'test_case_id' => 'tc_quote',
+                'user_id'      => auth()->id(),
             ]);
             $existing   = $param->parameters ?? [];
             $param->parameters = array_merge($existing, ['productCode' => $productCode]);

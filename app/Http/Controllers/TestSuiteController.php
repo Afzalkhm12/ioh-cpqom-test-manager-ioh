@@ -15,7 +15,7 @@ class TestSuiteController extends Controller
 
     public function index()
     {
-        $modules      = TestModule::withCount('testParameters')->orderBy('display_name')->get();
+        $modules      = TestModule::withCount(['testParameters' => fn($q) => $q->where('user_id', auth()->id())])->orderBy('display_name')->get();
         $categories   = $modules->pluck('category')->filter()->unique()->sort()->values();
         $runtimeState = RuntimeState::orderBy('state_key')->get();
         return view('test-suite.index', compact('modules', 'categories', 'runtimeState'));
@@ -25,7 +25,10 @@ class TestSuiteController extends Controller
 
     public function show(TestModule $testModule)
     {
-        $testModule->load(['testParameters', 'spec']);
+        $testModule->load([
+            'testParameters' => fn($q) => $q->where('user_id', auth()->id()),
+            'spec',
+        ]);
         $specs = TestSpec::orderBy('display_name')->get();
         return view('test-suite.show', compact('testModule', 'specs'));
     }
@@ -50,6 +53,8 @@ class TestSuiteController extends Controller
 
     public function updateParameter(Request $request, TestParameter $testParameter)
     {
+        abort_if($testParameter->user_id !== auth()->id(), 403);
+
         $request->validate([
             'parameters'   => 'nullable|array',
             'new_keys'     => 'nullable|array',
@@ -100,7 +105,7 @@ class TestSuiteController extends Controller
         }
 
         $testModule->testParameters()->updateOrCreate(
-            ['test_case_id' => strtolower($request->test_case_id)],
+            ['test_case_id' => strtolower($request->test_case_id), 'user_id' => auth()->id()],
             ['parameters' => $decoded, 'notes' => $request->notes]
         );
 
@@ -111,6 +116,8 @@ class TestSuiteController extends Controller
 
     public function destroyParameter(TestParameter $testParameter)
     {
+        abort_if($testParameter->user_id !== auth()->id(), 403);
+
         $id = $testParameter->test_case_id;
         $testParameter->delete();
         return back()->with('success', "Test case {$id} deleted.");
@@ -178,6 +185,7 @@ class TestSuiteController extends Controller
         try {
             $response = Http::timeout(60)->post($runnerUrl, [
                 'modules' => [$testModule->spec->runner_key],
+                'user_id' => auth()->id(),
             ]);
 
             return response()->json([

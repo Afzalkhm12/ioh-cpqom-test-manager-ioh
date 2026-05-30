@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductTestRun;
+use App\Models\ProductTestSuite;
+use App\Models\TestModule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -14,11 +16,25 @@ class ProductTestRunController extends Controller
         return response()->json($this->format($productTestRun));
     }
 
+    public function history(ProductTestSuite $productTestSuite, TestModule $testModule)
+    {
+        $runs = ProductTestRun::where('product_test_suite_id', $productTestSuite->id)
+            ->where('test_module_id', $testModule->id)
+            ->where('user_id', auth()->id())
+            ->orderByDesc('started_at')
+            ->paginate(20);
+
+        $jiraUrl = rtrim(env('JIRA_URL', ''), '/');
+
+        return view('product-test-runs.history', compact('productTestSuite', 'testModule', 'runs', 'jiraUrl'));
+    }
+
     public function update(Request $request, ProductTestRun $productTestRun)
     {
         $data = $request->validate([
             'status'            => 'nullable|in:running,success,error,aborted',
             'log'               => 'nullable|string',
+            'jira_ticket'       => 'nullable|string|max:50',
             'created_ids'       => 'nullable|array',
             'validation_status' => 'nullable|in:passed,not_passed',
         ]);
@@ -29,6 +45,10 @@ class ProductTestRunController extends Controller
 
         if (isset($data['log'])) {
             $productTestRun->log = $data['log'];
+        }
+
+        if (isset($data['jira_ticket'])) {
+            $productTestRun->jira_ticket = $data['jira_ticket'];
         }
 
         if (array_key_exists('created_ids', $data)) {
@@ -87,6 +107,7 @@ class ProductTestRunController extends Controller
             'id'                => $run->id,
             'status'            => $run->status,
             'log'               => $run->log,
+            'jira_ticket'       => $run->jira_ticket,
             'created_ids'       => $run->created_ids,
             'validation_status' => $run->validation_status,
             'finding'           => $run->finding,

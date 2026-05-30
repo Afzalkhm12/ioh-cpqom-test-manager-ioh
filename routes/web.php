@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/product-test-suites/{productTestSuite}/run/{testModule}', [App\Http\Controllers\ProductTestSuiteController::class, 'runModule'])->name('product-test-suites.run-module');
     Route::resource('product-test-suites', App\Http\Controllers\ProductTestSuiteController::class);
     Route::post('/product-test-runs/{productTestRun}/findings', [App\Http\Controllers\ProductTestRunController::class, 'storeFinding'])->name('product-test-runs.findings.store');
+    Route::get('/product-test-suites/{productTestSuite}/modules/{testModule}/runs', [App\Http\Controllers\ProductTestRunController::class, 'history'])->name('product-test-runs.history');
 
     // Modules & Test Cases
     Route::resource('modules', App\Http\Controllers\ModuleController::class);

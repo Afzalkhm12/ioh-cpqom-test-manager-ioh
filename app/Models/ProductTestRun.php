@@ -13,6 +13,7 @@ class ProductTestRun extends Model
         'user_id',
         'status',
         'log',
+        'jira_ticket',
         'runner_response',
         'created_ids',
         'validation_status',

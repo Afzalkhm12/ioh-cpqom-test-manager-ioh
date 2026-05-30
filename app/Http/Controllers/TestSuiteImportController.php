@@ -42,7 +42,7 @@ class TestSuiteImportController extends Controller
             $moduleData['exists'] = $existingModuleId !== null;
 
             $existingTcIds = $existingModuleId
-                ? TestParameter::where('module_id', $existingModuleId)->pluck('test_case_id', 'test_case_id')->all()
+                ? TestParameter::where('module_id', $existingModuleId)->where('user_id', auth()->id())->pluck('test_case_id', 'test_case_id')->all()
                 : [];
 
             foreach ($moduleData['test_cases'] as &$tcData) {
@@ -91,7 +91,7 @@ class TestSuiteImportController extends Controller
 
             foreach ($moduleData['test_cases'] as $tcData) {
                 TestParameter::updateOrCreate(
-                    ['module_id' => $module->id, 'test_case_id' => $tcData['test_case_id']],
+                    ['module_id' => $module->id, 'test_case_id' => $tcData['test_case_id'], 'user_id' => auth()->id()],
                     ['parameters' => $tcData['parameters'], 'notes' => $tcData['notes']]
                 );
                 $tcData['exists'] ? $tcUpdated++ : $tcCreated++;

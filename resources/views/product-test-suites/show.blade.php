@@ -164,6 +164,7 @@
                         $initialValidation = $lastRun?->validation_status ?? null;
                         $initialFinding    = $lastRun?->finding ?? '';
                         $initialLog        = $lastRun?->log ?? null;
+                        $initialJiraTicket = $lastRun?->jira_ticket ?? null;
                         $initialImages     = $lastRun?->evidence_images
                             ? array_map(fn($p) => \Illuminate\Support\Facades\Storage::url($p), $lastRun->evidence_images)
                             : [];
@@ -184,6 +185,8 @@
                             sfBaseUrl: '{{ $salesforceUrl }}',
                             finding: @js($initialFinding),
                             log: @js($initialLog),
+                            jiraTicket: @js($initialJiraTicket),
+                            jiraBaseUrl: '{{ rtrim(env("JIRA_URL", ""), "/") }}',
                             evidenceImages: @js($initialImages),
                             result: null,
                             open: {{ $detailOpen ? 'true' : 'false' }},
@@ -220,6 +223,7 @@
                                     this.validationStatus = null;
                                     this.finding = '';
                                     this.log = null;
+                                    this.jiraTicket = null;
                                     this.evidenceImages = [];
 
                                     await this.pollStatus(this.runId);
@@ -244,6 +248,7 @@
                                         this.validationStatus = data.validation_status ?? null;
                                         this.finding = data.finding ?? '';
                                         this.log = data.log ?? null;
+                                        this.jiraTicket = data.jira_ticket ?? null;
                                         this.evidenceImages = data.evidence_images ?? [];
                                         if (terminal.includes(data.status)) {
                                             this.open = data.status !== 'success';
@@ -383,6 +388,8 @@
                                     </button>
                                     <a href="{{ route('test-suite.show', $module) }}"
                                         class="text-xs text-brand-teal hover:underline font-medium">Open</a>
+                                    <a href="{{ route('product-test-runs.history', [$productTestSuite, $module]) }}"
+                                        class="text-xs text-gray-400 hover:underline font-medium">History</a>
                                 </div>
                             </td>
                         </tr>
@@ -396,6 +403,20 @@
                                     <p class="text-xs text-gray-400">
                                         Run ID: <span class="font-mono text-gray-600" x-text="runId"></span>
                                     </p>
+                                </template>
+
+                                {{-- Jira ticket --}}
+                                <template x-if="jiraTicket">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-gray-500 font-medium">Jira:</span>
+                                        <a :href="jiraBaseUrl + '/' + jiraTicket" target="_blank" rel="noopener"
+                                            class="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition">
+                                            <span x-text="jiraTicket"></span>
+                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                            </svg>
+                                        </a>
+                                    </div>
                                 </template>
 
                                 {{-- Error / log --}}

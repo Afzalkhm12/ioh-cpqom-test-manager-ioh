@@ -9,6 +9,7 @@ class TestParameter extends Model
 {
     protected $fillable = [
         'module_id',
+        'user_id',
         'test_case_id',
         'parameters',
         'notes',
@@ -21,5 +22,10 @@ class TestParameter extends Model
     public function module(): BelongsTo
     {
         return $this->belongsTo(TestModule::class, 'module_id');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }
