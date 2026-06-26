@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-
 class ObjectSyncController extends Controller
 {
     public function index()
@@ -20,13 +18,20 @@ class ObjectSyncController extends Controller
 
     public function store(\Illuminate\Http\Request $request)
     {
-        $request->validate(['api_name' => 'required|string|max:255']);
-        
+        $request->validate([
+            'api_name' => 'required|string|max:255',
+        ]);
+
         $apiName = trim($request->api_name);
-        
+
         try {
             $sfService = new \App\Services\SalesforceService();
-            $describeData = $sfService->describeObject($apiName);
+            $token = $sfService->getAccessToken();
+            if (! $token) {
+                throw new \Exception('Could not obtain a Salesforce access token. Check SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET in your .env file.');
+            }
+
+            $describeData = $sfService->describeObject($apiName, false, $token);
             
             // Create or update Object
             $sfObj = \App\Models\SalesforceObject::updateOrCreate(
@@ -47,11 +52,23 @@ class ObjectSyncController extends Controller
                 // Determine readability checking standard filterable/custom flags or default to true
                 $isReadable = isset($field['filterable']) ? $field['filterable'] : true;
 
+                $picklistValues = null;
+                if (in_array($field['type'], ['picklist', 'multipicklist']) && !empty($field['picklistValues'])) {
+                    $picklistValues = json_encode(
+                        array_values(array_map(
+                            fn($v) => ['label' => $v['label'], 'value' => $v['value']],
+                            array_filter($field['picklistValues'], fn($v) => $v['active'] ?? true)
+                        ))
+                    );
+                }
+
                 $fieldsToInsert[] = [
                     'salesforce_object_id' => $sfObj->id,
                     'label' => $field['label'],
                     'api_name' => $field['name'],
                     'type' => $field['type'],
+                    'referenced_to' => $field['referenceTo'][0] ?? null,
+                    'picklist_values' => $picklistValues,
                     'is_insertable' => $field['createable'] ?? false,
                     'is_updatable' => $field['updateable'] ?? false,
                     'is_readable' => $isReadable,

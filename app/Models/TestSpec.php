@@ -13,6 +13,11 @@ class TestSpec extends Model
         'file_path',
         'description',
         'test_type',
+        'api_config',
+    ];
+
+    protected $casts = [
+        'api_config' => 'array',
     ];
 
     public function testModules(): HasMany

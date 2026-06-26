@@ -107,30 +107,117 @@ class SalesforceService
         ];
     }
 
-    public function describeObject(string $apiName, bool $isRetry = false)
+    public function describeObject(string $apiName, bool $isRetry = false, ?string $token = null)
     {
-        $token = $this->getAccessToken(); 
+        $token    = $token ?? $this->getAccessToken();
         $endpoint = "/services/data/v60.0/sobjects/{$apiName}/describe";
         $response = Http::withToken($token)->acceptJson()->get("{$this->url}{$endpoint}");
-        
-        // Handle Stale System Cache Token
-        if ((!$response->successful() && $response->status() === 401) || 
+
+        // Handle stale system token — only retry for the system (cached) token
+        if ((!$response->successful() && $response->status() === 401) ||
             (is_array($response->json()) && isset($response->json()[0]['errorCode']) && $response->json()[0]['errorCode'] === 'INVALID_SESSION_ID')) {
             if (!$isRetry) {
                 Cache::forget('salesforce_access_token');
-                return $this->describeObject($apiName, true);
+                $freshToken = $this->getAccessToken();
+                return $this->describeObject($apiName, true, $freshToken);
             }
         }
 
         if ($response->status() === 404) {
-             throw new \Exception("API name must correct.");
+            throw new \Exception("API name must correct.");
         }
-        
+
         if (!$response->successful()) {
-             throw new \Exception("Salesforce returned an error: " . $response->body());
+            throw new \Exception("Salesforce returned an error: " . $response->body());
         }
 
         return $response->json();
+    }
+
+    public function getAccessTokenForEnvironment(\App\Models\SfEnvironment $env): ?string
+    {
+        $clientId     = $env->client_id;
+        $clientSecret = $env->client_secret;
+        $sfUrl        = rtrim($env->sf_url ?: $this->url, '/');
+
+        if (!$clientId || !$clientSecret) {
+            return null;
+        }
+
+        $response = Http::asForm()->post("{$sfUrl}/services/oauth2/token", [
+            'grant_type'    => 'client_credentials',
+            'client_id'     => $clientId,
+            'client_secret' => $clientSecret,
+        ]);
+
+        return $response->successful() ? ($response->json('access_token') ?: null) : null;
+    }
+
+    public function createRecord(string $object, array $fields, string $token): array
+    {
+        $endpoint = "/services/data/v60.0/sobjects/{$object}";
+        $response = Http::withToken($token)->acceptJson()
+            ->post("{$this->url}{$endpoint}", $fields);
+
+        return [
+            'success'  => $response->successful(),
+            'status'   => $response->status(),
+            'response' => $response->json(),
+        ];
+    }
+
+    public function updateRecord(string $object, string $id, array $fields, string $token): array
+    {
+        $endpoint = "/services/data/v60.0/sobjects/{$object}/{$id}";
+        $response = Http::withToken($token)->acceptJson()
+            ->patch("{$this->url}{$endpoint}", $fields);
+
+        return [
+            'success'  => $response->status() === 204,
+            'status'   => $response->status(),
+            'response' => $response->json() ?? [],
+        ];
+    }
+
+    public function executeComposite(array $compositeRequest, string $token, bool $allOrNone = true): array
+    {
+        $endpoint = "/services/data/v60.0/composite";
+        $response = Http::withToken($token)->acceptJson()
+            ->post("{$this->url}{$endpoint}", [
+                'allOrNone'        => $allOrNone,
+                'compositeRequest' => $compositeRequest,
+            ]);
+
+        return [
+            'success'  => $response->successful(),
+            'status'   => $response->status(),
+            'response' => $response->json(),
+        ];
+    }
+
+    public function executeQuery(string $soql, string $token): array
+    {
+        $endpoint = "/services/data/v60.0/query?q=" . urlencode($soql);
+        $response = Http::withToken($token)->acceptJson()->get("{$this->url}{$endpoint}");
+        return [
+            'success'  => $response->successful(),
+            'status'   => $response->status(),
+            'response' => $response->json(),
+        ];
+    }
+
+    public function lookupByName(string $object, string $name, string $token): ?string
+    {
+        $soql     = "SELECT Id FROM {$object} WHERE Name = '" . addslashes($name) . "' LIMIT 1";
+        $endpoint = "/services/data/v60.0/query?q=" . urlencode($soql);
+        $response = Http::withToken($token)->acceptJson()->get("{$this->url}{$endpoint}");
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $records = $response->json('records') ?? [];
+        return $records[0]['Id'] ?? null;
     }
 
     /**

@@ -56,6 +56,14 @@
                     </x-slot>
 
                     <x-slot name="content">
+                        @if(Auth::user()->role === 'Admin')
+                            <x-dropdown-link :href="route('object-sync.index')">
+                                {{ __('Object Sync') }}
+                            </x-dropdown-link>
+
+                            <div class="border-t border-gray-100"></div>
+                        @endif
+
                         <x-dropdown-link :href="route('profile.edit')">
                             {{ __('Profile') }}
                         </x-dropdown-link>
@@ -122,6 +130,14 @@
             </div>
 
             <div class="mt-3 space-y-1">
+                @if(Auth::user()->role === 'Admin')
+                    <x-responsive-nav-link :href="route('object-sync.index')">
+                        {{ __('Object Sync') }}
+                    </x-responsive-nav-link>
+
+                    <div class="border-t border-gray-200 my-1"></div>
+                @endif
+
                 <x-responsive-nav-link :href="route('profile.edit')">
                     {{ __('Profile') }}
                 </x-responsive-nav-link>

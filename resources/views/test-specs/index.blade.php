@@ -90,6 +90,10 @@
                             </td>
                             <td class="px-6 py-3 text-right">
                                 <div class="flex justify-end gap-3">
+                                    @if($spec->test_type === 'api')
+                                        <a href="{{ route('api-builder.show', $spec) }}"
+                                            class="text-xs text-indigo-500 hover:underline font-medium">Builder</a>
+                                    @endif
                                     <button onclick="openEditModal({{ $spec->toJson() }})"
                                         class="text-xs text-brand-teal hover:underline font-medium">Edit</button>
                                     <form method="POST" action="{{ route('test-specs.destroy', $spec) }}"

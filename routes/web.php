@@ -50,6 +50,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/test-suite/{testModule}/api-test', [App\Http\Controllers\QuoteApiTestController::class, 'show'])->name('test-suite.api-test.show');
     Route::post('/test-suite/{testModule}/api-test/run', [App\Http\Controllers\QuoteApiTestController::class, 'run'])->name('test-suite.api-test.run');
 
+    // API Record Builder
+    Route::get('/api-builder/lookup', [App\Http\Controllers\ApiBuilderController::class, 'lookup'])->name('api-builder.lookup');
+    Route::get('/api-builder/{testSpec}', [App\Http\Controllers\ApiBuilderController::class, 'show'])->name('api-builder.show');
+    Route::patch('/api-builder/{testSpec}/config', [App\Http\Controllers\ApiBuilderController::class, 'saveConfig'])->name('api-builder.config');
+    Route::post('/api-builder/{testSpec}/execute', [App\Http\Controllers\ApiBuilderController::class, 'execute'])->name('api-builder.execute');
+
     // Spec Files management
     Route::get('/test-specs', [App\Http\Controllers\TestSpecController::class, 'index'])->name('test-specs.index');
     Route::post('/test-specs', [App\Http\Controllers\TestSpecController::class, 'store'])->name('test-specs.store');
